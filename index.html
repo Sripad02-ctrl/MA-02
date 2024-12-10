@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="d3.js"></script>
+    <script src="d3jstopojson.v1.js"></script>
+    <title>MA Map</title>
+    <style>
+        h1, h2, h3 {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 10px;
+        }
+        .container h3 {
+            margin-bottom: 20px;
+        }
+        #tooltip_1, #tooltip_2, #tooltip_3 {
+            position: fixed;
+            opacity: 0;
+            top: 0;
+            left: 0;
+            width: auto;
+            padding: 10px;
+            background: white;
+            font-family: sans-serif;
+            font-size: medium;
+            border-radius: 2px;
+            line-height: 1;
+            pointer-events: none;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        }
+        path {
+            stroke-width: .5px;
+            stroke: black;
+        }
+        path:hover {
+            opacity: .6;
+            stroke: black;
+            stroke-width: 2px;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .map-container {
+            margin: 20px 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Geospatial Visualization</h1>
+    <h2>Sripad Tiruvaipati</h2>
+
+    <!-- Map with title for Population 1980 -->
+    <div class="map-container">
+        <h3>A: Actual Population in 1980</h3>
+        <div id="tooltip_1"></div>
+        <div class="fig1"></div>
+    </div>
+
+    <!-- Map with title for Population Change 2000-2010 -->
+    <div class="map-container">
+        <h3>B: Population change between 1980 and 2010</h3>
+        <div id="tooltip_2"></div>
+        <div class="fig2"></div>
+    </div>
+
+    <!-- Map with title for FIPS State County Code -->
+    <div class="map-container">
+        <h3>C: Gini Index for each county in 2019</h3>
+        <div id="tooltip_3"></div>
+        <div class="fig3"></div>
+    </div>
+</div>
+
+<script>
+    const window_dims = {
+        width: window.innerWidth,
+        height: window.innerHeight
+    };
+    const svgWidth = window_dims.width / 2;
+    const svgHeight = window_dims.width / 3;
+
+    const MA_counties = "towns.topojson";
+    const gini_index = "gini_index.csv";
+
+    Promise.all([
+        d3.json(MA_counties),
+        d3.csv(gini_index)
+    ]).then(data => {
+        const topology_data = data[0];
+        const gini_data = data[1];
+
+        const generateMap2 = (topo_data,containerName,width,height,margin=30) =>{
+                const svg = d3.select(containerName).append("svg")
+                    .attr("width", width)
+                    .attr("height", height);
+                const geojson = topojson.feature(topo_data, topo_data.objects.ma);
+                const projections = [
+                    d3.geoAzimuthalEqualArea(),
+                    d3.geoAlbersUsa(),
+                    d3.geoAlbers(),
+                    d3.geoMercator(),
+                    d3.geoNaturalEarth1(),
+                    d3.geoEqualEarth(),
+                    d3.geoConicEqualArea(),
+                    d3.geoEquirectangular(),
+                    d3.geoOrthographic()
+                ]
+                const geoPath_generator = d3.geoPath()
+                .projection(projections[3].fitSize([width-margin,height-margin], geojson))
+                const colorInterpolator = d3.interpolateRgbBasis(['#d73027','#fc8d59','#fee090','#e0f3f8','#91bfdb','#4575b4'].reverse())
+                const logScale = d3.scaleLog()
+                    .domain(d3.extent(geojson.features, (d) => {
+                        return d['properties']['POP1980']
+                    }))
+                const linearScale = d3.scaleLinear()
+                    .domain(d3.extent(geojson.features, (d) => {
+                        return d['properties']['POP1980']
+                    }))
+                const tooltip = d3.select("#tooltip_1");
+                svg.selectAll("path")
+                    .data(geojson.features)
+                    .enter()
+                    .append("path")
+                    .attr("d", d => geoPath_generator(d))
+                    .attr("fill", d => colorInterpolator(logScale(d['properties']['POP1980'])))
+                    .on("mouseenter", (m, d) => {
+                        tooltip.transition()
+                            .duration(800)
+                            .style("opacity", .9)
+                        tooltip.html(`${d['properties']['TOWN']} <br>Population in 1980: ${d['properties']['POP1980']}`)
+                            .style("left", m.clientX + "px")
+                            .style("top", m.clientY + "px");
+                    })
+                    .on("mousemove", (m, d) => {
+                        tooltip.style("opacity", .9)
+                    })
+                    .on("mouseout", (m, d) => {
+                        tooltip.transition()
+                            .duration(400)
+                            .style("opacity", 0)
+                    })
+            }
+
+        const generateMap3 = (topo_data, containerName, width, height, margin = 30) => {
+            const svg = d3.select(containerName).append("svg")
+                .attr("width", width)
+                .attr("height", height);
+            const geojson = topojson.feature(topo_data, topo_data.objects.ma);
+            const projections = [
+                d3.geoAzimuthalEqualArea(),
+                d3.geoAlbersUsa(),
+                d3.geoAlbers(),
+                d3.geoMercator(),
+                d3.geoNaturalEarth1(),
+                d3.geoEqualEarth(),
+                d3.geoConicEqualArea(),
+                d3.geoEquirectangular(),
+                d3.geoOrthographic()
+            ];
+            const geoPath_generator = d3.geoPath()
+                .projection(projections[3].fitSize([width - margin, height - margin], geojson));
+           const colorInterpolator = d3.interpolateRgbBasis(['#fef0d9', '#fdcc8a', '#fc8d59', '#e34a33', '#b30000'].reverse());
+            const tooltip = d3.select("#tooltip_2");
+            svg.selectAll("path")
+                .data(geojson.features)
+                .enter()
+                .append("path")
+                .attr("d", d => geoPath_generator(d))
+                .attr("fill", d => {
+                        const pop1980 = d.properties['POP1980'] || 0;
+                        const pop2010 = d.properties['POP2010'] || 0;
+                        const popChange = pop2010 - pop1980;
+                        d.properties['POPCH80_10'] = popChange;
+                        return colorInterpolator(popChange ? (popChange / Math.abs(popChange)) : 0);
+                    }).on("mouseenter", (m, d) => {
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", .9);
+                    tooltip.html(`
+                    ${d['properties']['TOWN']} <br> 
+                    Population 1980: ${d.properties['POP1980']}<br>
+                            Population 2010: ${d.properties['POP2010']} <br>
+                            Population Change: ${d.properties['POPCH80_10']}
+                        `).style("left", m.clientX + "px")
+                        .style("top", m.clientY + "px");
+                })
+                .on("mousemove", (m, d) => {
+                    tooltip.style("opacity", .9);
+                })
+                .on("mouseout", (m, d) => {
+                    tooltip.transition()
+                        .duration(400)
+                        .style("opacity", 0);
+                });
+        };
+
+        const generateMap4 = (topo_data, csv_data, containerName, width, height, margin = 30) => {
+           
+            const giniIndexMap = {};
+            csv_data.forEach(row => {
+            const fipsCode = row['id'].slice(-5);  
+               const year = +row['year'];
+               const giniValue = parseFloat(row['Estimate!!Gini Index']);
+              if (!giniIndexMap[fipsCode]) giniIndexMap[fipsCode] = [];
+              giniIndexMap[fipsCode].push({ year, giniValue });
+            });
+
+           
+            const svg = d3.select(containerName).append("svg")
+                .attr("width", width)
+                .attr("height", height);
+            const geojson = topojson.feature(topo_data, topo_data.objects.ma);
+            const projections = [
+                d3.geoAzimuthalEqualArea(),
+                d3.geoAlbersUsa(),
+                d3.geoAlbers(),
+                d3.geoMercator(),
+                d3.geoNaturalEarth1(),
+                d3.geoEqualEarth(),
+                d3.geoConicEqualArea(),
+                d3.geoEquirectangular(),
+                d3.geoOrthographic()
+            ];
+            const geoPath_generator = d3.geoPath()
+                .projection(projections[3].fitSize([width - margin, height - margin], geojson));
+                const colorInterpolator = d3.interpolateRgbBasis(['#ffffb2', '#fecc5c', '#fd8d3c', '#f03b20', '#bd0026']);
+                const csv_data_year = csv_data.filter(d => d.year === "2019");
+            
+            csv_data_year.forEach(row => {
+                const fipsCode = row['id'].slice(-5);  
+                const year = +row['year'];
+                const giniValue = parseFloat(row['Estimate!!Gini Index']);
+                if (!giniIndexMap[fipsCode]) giniIndexMap[fipsCode] = [];
+                giniIndexMap[fipsCode].push({ year, giniValue });
+            });
+
+            const features = topojson.feature(topology_data, topology_data.objects.ma).features;
+            features.forEach(feature => {
+                const fipsCode = feature.properties['FIPS_STCO'];
+                feature.properties['Gini_Index'] = giniIndexMap[fipsCode] || [];
+            });
+            const linearScale = d3.scaleLinear()
+                .domain([0.3, 0.6]); 
+
+            const tooltip = d3.select("#tooltip_3");
+            svg.selectAll("path")
+                .data(geojson.features)
+                .enter()
+                .append("path")
+                .attr("d", d => geoPath_generator(d))
+                .attr("fill", d => {
+                    const giniIndexData = d.properties['Gini_Index'];
+                    return giniIndexData.length ? colorInterpolator(linearScale(giniIndexData[giniIndexData.length - 1].giniValue)) : '#ccc';
+                })
+                .on("mouseenter", (m, d) => {
+                    tooltip.transition().duration(200).style("opacity", .9);
+                    tooltip.html(`
+                        ${d.properties['TOWN']}<br>
+                        Gini Index (Latest): ${d.properties['Gini_Index'].length ? d.properties['Gini_Index'][d.properties['Gini_Index'].length - 1].giniValue : 'Data not available'}
+                    `).style("left", m.clientX + "px").style("top", m.clientY + "px");
+                })
+                .on("mousemove", () => tooltip
+                    .style("opacity", .9))
+                .on("mouseout", () => tooltip
+                    .transition()
+                    .duration(400)
+                    .style("opacity", 0));
+        };
+
+        generateMap2(topology_data, ".fig1", svgWidth, svgHeight);
+        generateMap3(topology_data, ".fig2", svgWidth, svgHeight);
+        generateMap4(topology_data, gini_data, ".fig3", svgWidth, svgHeight);
+    });
+</script>
+</body>
+</html>
